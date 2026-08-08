@@ -1,0 +1,36 @@
+name: build
+on: [pull_request, push, workflow_dispatch]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+      - name: Build Release
+        run: ./gradlew assembleRelease
+      - name: Restore signing key
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > release.jks
+      - name: Sign APK
+        run: |
+          BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          APK=$(find app/build/outputs/apk/release -name "*-unsigned.apk" | head -1)
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks release.jks \
+            --ks-key-alias release \
+            --ks-pass pass:kasumikira \
+            --out app-release.apk \
+            "$APK"
+          "$BUILD_TOOLS/apksigner" verify \
+            --verbose \
+            app-release.apk
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: app-release.apk
